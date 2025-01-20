@@ -8,9 +8,10 @@
 }
 
 h1 {
-  color: #2d3748;
+  color: #000000;
   text-align: center;
   margin-bottom: 2rem;
+  font-weight: 700;
 }
 
 .form-group {
@@ -20,17 +21,19 @@ h1 {
 label {
   display: block;
   margin-bottom: 0.5rem;
-  color: #4a5568;
+  color: #000000;
   font-weight: 500;
 }
 
 input, select {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #000000;
   border-radius: 6px;
   font-size: 1rem;
   transition: border-color 0.2s;
+  background: #ffffff;
+  color: #000000;
 }
 
 input:focus, select:focus {
@@ -86,8 +89,9 @@ input:focus, select:focus {
 .commentary-log {
   margin-top: 2rem;
   padding: 1rem;
-  background: #f7fafc;
+  background: #ffffff;
   border-radius: 8px;
+  border: 1px solid #000000;
 }
 
 .log-content {
@@ -95,18 +99,105 @@ input:focus, select:focus {
   overflow-y: auto;
   padding: 1rem;
   background: white;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #000000;
   border-radius: 6px;
 }
 
 .log-entry {
   padding: 0.5rem;
-  border-bottom: 1px solid #edf2f7;
+  border-bottom: 1px solid #000000;
   font-family: monospace;
   white-space: pre-wrap;
   word-break: break-word;
+  color: #000000;
 }
 
 .log-entry:last-child {
   border-bottom: none;
+}
+
+.sketchpad-container {
+  margin: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sketchpad-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sketchpad-controls input[type="color"] {
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+  background: none;
+}
+
+.sketchpad-controls input[type="range"] {
+  width: 150px;
+  height: 2px;
+  -webkit-appearance: none;
+  background: #e2e8f0;
+  border-radius: 1px;
+  outline: none;
+}
+
+.sketchpad-controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #4299e1;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.sketchpad-controls button {
+  padding: 0.5rem 1rem;
+  background-color: #e53e3e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.sketchpad-controls button:hover {
+  background-color: #c53030;
+}
+
+.sketchpad {
+  border: 2px solid #000000;
+  background-color: #ffffff;
+  cursor: crosshair;
+}
+
+.subtitles-box {
+  width: 800px;
+  min-height: 100px;
+  max-height: 200px;
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 5px;
+  overflow-y: auto;
+}
+
+.subtitle-line {
+  margin: 5px 0;
+  color: #000000;
+  font-size: 16px;
+  line-height: 1.4;
 } 

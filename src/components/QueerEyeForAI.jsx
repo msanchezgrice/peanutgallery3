@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './QueerEyeForAI.css';
 
 function QueerEyeForAI() {
@@ -12,24 +12,148 @@ function QueerEyeForAI() {
   const [targetVideoLength, setTargetVideoLength] = useState(15);
   const [log, setLog] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentColor, setCurrentColor] = useState('#000000');
+  const [currentSize, setCurrentSize] = useState(5);
+  const [canvasInterval, setCanvasInterval] = useState(null);
 
   const pcRef = useRef(null);
   const dcRef = useRef(null);
   const audioRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const canvasRef = useRef(null);
+  const contextRef = useRef(null);
+
+  // Initial canvas setup - only run once
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    canvas.width = 800;
+    canvas.height = 600;
+    
+    const context = canvas.getContext('2d');
+    context.lineCap = 'round';
+    context.strokeStyle = currentColor;
+    context.lineWidth = currentSize;
+    contextRef.current = context;
+
+    // Set initial white background
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    canvas._hasContent = true;
+  }, []); // Empty dependency array - only run once
+
+  // Update context properties without resetting canvas
+  useEffect(() => {
+    if (contextRef.current) {
+      contextRef.current.strokeStyle = currentColor;
+      contextRef.current.lineWidth = currentSize;
+    }
+  }, [currentColor, currentSize]);
+
+  const startDrawing = ({ nativeEvent }) => {
+    const { offsetX, offsetY } = nativeEvent;
+    contextRef.current.beginPath();
+    contextRef.current.moveTo(offsetX, offsetY);
+    setIsDrawing(true);
+  };
+
+  const draw = ({ nativeEvent }) => {
+    if (!isDrawing) return;
+    
+    const { offsetX, offsetY } = nativeEvent;
+    contextRef.current.lineTo(offsetX, offsetY);
+    contextRef.current.stroke();
+  };
+
+  const finishDrawing = () => {
+    contextRef.current.closePath();
+    setIsDrawing(false);
+    
+    // Send canvas data to AI when stroke is complete
+    if (dcRef.current?.readyState === 'open') {
+      const canvas = canvasRef.current;
+      const imageData = canvas.toDataURL('image/png').split(',')[1]; // Remove data URL prefix
+      const message = {
+        type: 'response.create',
+        response: {
+          modalities: ['text', 'audio'],
+          instructions: `You are an AI commentator with two distinct personalities:
+                       Agent 1 Personality: ${agent1Personality}
+                       Agent 2 Personality: ${agent2Personality}
+                       
+                       Your commentary style is: ${commentaryStyle}
+                       
+                       You are viewing a drawing. Here is the base64 image data:
+                       data:image/png;base64,${imageData}
+                       
+                       Please analyze and comment on what you see in the drawing.
+                       Be specific about shapes, lines, colors, and patterns you observe.
+                       Stay in character and maintain your personality.
+                       Be entertaining and engaging.
+                       Interact with each other as you comment.`
+        }
+      };
+      dcRef.current.send(JSON.stringify(message));
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = currentColor;
+    context.lineWidth = currentSize;
+    canvas._hasContent = false;
+  };
+
+  // Add state for subtitles
+  const [subtitles, setSubtitles] = useState([]);
+
+  // Update the message handler to store subtitles
+  useEffect(() => {
+    if (dcRef.current) {
+      dcRef.current.onmessage = (e) => {
+        try {
+          const realtimeEvent = JSON.parse(e.data);
+          setLog(oldLog => [...oldLog, JSON.stringify(realtimeEvent, null, 2)]);
+          
+          // Extract text content for subtitles
+          if (realtimeEvent.delta?.text) {
+            setSubtitles(prev => {
+              const newSubtitles = [...prev, realtimeEvent.delta.text];
+              // Keep only last 5 subtitle entries
+              return newSubtitles.slice(-5);
+            });
+          }
+        } catch (err) {
+          console.error('Failed to parse data channel message:', err);
+          setLog(oldLog => [...oldLog, `Error parsing message: ${err.message}`]);
+        }
+      };
+    }
+  }, []);  // Remove dcRef.current from dependencies to prevent recreation
 
   const handleGenerateCommentary = async () => {
     try {
       setLog(oldLog => [...oldLog, "Connecting to server..."]);
       
       const resp = await fetch('http://localhost:3001/session');
-      if (!resp.ok) {
-        throw new Error('Failed to get session token');
-      }
       const data = await resp.json();
-      if (!data.client_secret?.value) {
-        throw new Error('Invalid session token response');
+      console.log('Server response:', data);
+
+      if (!resp.ok) {
+        throw new Error(data.error || 'Failed to get session token');
       }
+
+      if (data.error) {
+        throw new Error(`API Error: ${data.error}`);
+      }
+
+      if (!data.client_secret?.value) {
+        throw new Error('Invalid session token response: No client_secret.value');
+      }
+
       const EPHEMERAL_KEY = data.client_secret.value;
       setLog(oldLog => [...oldLog, "Got session token"]);
 
@@ -65,26 +189,37 @@ function QueerEyeForAI() {
           type: 'response.create',
           response: {
             modalities: ['text', 'audio'],
-            instructions: `You are Agent 1: ${agent1Personality}; 
-                         You are Agent 2: ${agent2Personality}.
-                         Commentary style: ${commentaryStyle}.
-                         Clip sampling: ${clipSamplingInterval}s
-                         Speed: ${conversationSpeed}
-                         Target length: ${targetVideoLength} seconds
-                         (Use the YouTube content at: ${youtubeUrl} for context!)`
+            instructions: `You are an AI commentator with two distinct personalities:
+                         Agent 1 Personality: ${agent1Personality}
+                         Agent 2 Personality: ${agent2Personality}
+                         
+                         Your commentary style is: ${commentaryStyle}
+                         
+                         When commenting on drawings:
+                         - Imagine you're watching someone draw on an 800x600 canvas
+                         - Describe what you think they might be drawing
+                         - React to imagined lines, shapes, and colors being added
+                         - Stay in character and maintain your personality
+                         - Be entertaining and engaging
+                         - Interact with each other as you comment
+                         
+                         When commenting on videos:
+                         - Sample clips every ${clipSamplingInterval} seconds
+                         - Maintain a ${conversationSpeed} conversation pace
+                         - Target a ${targetVideoLength} second commentary
+                         - React to the YouTube content at: ${youtubeUrl}
+                         - Describe what you imagine seeing in vivid detail
+                         - Stay in character and maintain your personality
+                         
+                         Remember to:
+                         - Be descriptive and specific in your commentary
+                         - React to what you imagine is happening in real-time
+                         - Keep your assigned personality traits consistent
+                         - Engage with each other's comments
+                         - Make it entertaining and fun!`
           }
         };
         dc.send(JSON.stringify(initialMessage));
-      };
-
-      dc.onmessage = (e) => {
-        try {
-          const realtimeEvent = JSON.parse(e.data);
-          setLog(oldLog => [...oldLog, JSON.stringify(realtimeEvent, null, 2)]);
-        } catch (err) {
-          console.error('Failed to parse data channel message:', err);
-          setLog(oldLog => [...oldLog, `Error parsing message: ${err.message}`]);
-        }
       };
 
       const offer = await pc.createOffer();
@@ -119,6 +254,9 @@ function QueerEyeForAI() {
     } catch (error) {
       console.error('Error generating commentary:', error);
       setLog(oldLog => [...oldLog, `Error: ${error.toString()}`]);
+      if (error.details) {
+        setLog(oldLog => [...oldLog, `Details: ${JSON.stringify(error.details, null, 2)}`]);
+      }
     }
   };
 
@@ -146,10 +284,92 @@ function QueerEyeForAI() {
     }
   };
 
+  // Update the periodic canvas sampling
+  useEffect(() => {
+    if (dcRef.current?.readyState === 'open') {
+      const interval = setInterval(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const imageData = canvas.toDataURL('image/png').split(',')[1];
+          const message = {
+            type: 'response.create',
+            response: {
+              modalities: ['text', 'audio'],
+              instructions: `You are an AI commentator with two distinct personalities:
+                           Agent 1 Personality: ${agent1Personality}
+                           Agent 2 Personality: ${agent2Personality}
+                           
+                           Your commentary style is: ${commentaryStyle}
+                           
+                           You are viewing a drawing. Here is the base64 image data:
+                           data:image/png;base64,${imageData}
+                           
+                           Please analyze and comment on the overall progress of the drawing.
+                           Be specific about shapes, lines, colors, and patterns you observe.
+                           Stay in character and maintain your personality.
+                           Be entertaining and engaging.
+                           Interact with each other as you comment.`
+            }
+          };
+          dcRef.current.send(JSON.stringify(message));
+        }
+      }, 5000); // Sample every 5 seconds
+
+      setCanvasInterval(interval);
+      return () => clearInterval(interval);
+    }
+  }, [dcRef.current?.readyState, agent1Personality, agent2Personality, commentaryStyle]);
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (canvasInterval) {
+        clearInterval(canvasInterval);
+      }
+    };
+  }, [canvasInterval]);
+
   return (
     <div className="queer-eye-container">
-      <h1>Queer Eye for the AI</h1>
+      <h1>Peanut Gallery</h1>
       
+      <div className="sketchpad-container">
+        <div className="sketchpad-controls">
+          <input 
+            type="color" 
+            value={currentColor} 
+            onChange={(e) => {
+              setCurrentColor(e.target.value);
+              contextRef.current.strokeStyle = e.target.value;
+            }} 
+          />
+          <input 
+            type="range" 
+            min="1" 
+            max="20" 
+            value={currentSize} 
+            onChange={(e) => {
+              setCurrentSize(e.target.value);
+              contextRef.current.lineWidth = e.target.value;
+            }} 
+          />
+          <button onClick={clearCanvas}>Clear Canvas</button>
+        </div>
+        <canvas
+          ref={canvasRef}
+          onMouseDown={startDrawing}
+          onMouseUp={finishDrawing}
+          onMouseMove={draw}
+          onMouseLeave={finishDrawing}
+          className="sketchpad"
+        />
+        <div className="subtitles-box">
+          {subtitles.map((text, index) => (
+            <p key={index} className="subtitle-line">{text}</p>
+          ))}
+        </div>
+      </div>
+
       <div className="form-group">
         <label>YouTube URL:</label>
         <input 
